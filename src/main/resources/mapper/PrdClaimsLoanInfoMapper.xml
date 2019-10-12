@@ -1,0 +1,304 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.wypuhui.p2p.uploud.data.baihang.dao.PrdClaimsLoanInfoMapper" >
+  <select id="selectLoanAccountInfo" parameterType="java.lang.Object" resultType="com.wypuhui.p2p.uploud.data.baihang.result.LoanAccountInfo" >
+      select
+        RAWTOHEX(sys_guid())  reqID, usr.mobile mobile ,prd.id prdId,
+        case when usr.IS_CORP = 1 then com.CORP_NAME else usr.real_name end as name,
+	    case when usr.IS_CORP = 1 then com.CORP_CARD else usr.idno end as  pid ,
+		prd.ID ||'WYPH'|| prd.prd_num  loanId,
+		null as originalLoanId,
+		to_char(prd.CREATE_TIME - 1/24,'yyyy-mm-dd HH24:MI:SS') applyDate,
+	    to_char(prd.LOAN_DATE - 30/(24*60*60),'yyyy-mm-dd HH24:MI:SS')	accountOpenDate,
+		to_char(prd.LOAN_DATE,'yyyy-mm-dd HH24:MI:SS') issueDate,
+        to_char(prd.LOAN_DATE + 1,'yyyy-mm-dd HH24:MI:SS') uploadTs,
+		to_char(rp.repay_per_date,'yyyy-mm-dd') dueDate,prd.BORROW_AMOUNT loanAmount, rp.repay_per_no totalTerm,
+		to_char((select min(repay_per_date) from RP_PLAN_CASH where prd_claims_id = prd.id and IS_EARLY_PREPAYMENT is null),'yyyy-mm-dd') firstRepaymentDate,
+		prd.TRADE_MARK tradeMark, prd.PURPOSE purpose
+    from prd_claims prd
+    join order_user usr on prd.APPLY_UNAME = usr.id
+    left join (select DISTINCT CORP_NAME, CORP_CARD, USER_ID from COM_INFO where status = 1) com on usr.id = com.user_id
+    left join
+            (
+                select * from (
+                        select  rp.id , ROW_NUMBER() OVER(PARTITION BY rp.prd_claims_id ORDER BY rp.repay_per_no desc) sort ,repay_per_no,
+                                rp.repay_per_date,rp.prd_claims_id
+                        from RP_PLAN_CASH rp where IS_EARLY_PREPAYMENT is null
+                ) where sort = 1
+            ) rp on rp.prd_claims_id = prd.id
+    where prd.loan_date is not null and prd.status >= 5 and to_char(prd.LOAN_DATE,'yyyy-MM-dd') between #{startTime} and #{endTime}
+    and prd.id not in (select DISTINCT a.PRD_CLAIMS_ID from RP_PLAN_CASH  a
+                        JOIN RP_PLAN_CASH b  on a.PRD_CLAIMS_ID = b.PRD_CLAIMS_ID and b.REPAY_PER_NO > a.REPAY_PER_NO
+                        where a.ACTUAL_REPAYMENT_TIME >= b.ACTUAL_REPAYMENT_TIME and a.PLAN_REPAY_AMT !=0 and b.PLAN_REPAY_AMT !=0 )
+    order by prd.loan_date asc
+  </select>
+
+
+  <select id="selectAfterLoanInfo" parameterType="java.lang.Object" resultType="com.wypuhui.p2p.uploud.data.baihang.result.LoanAfterInfo" >
+
+
+      select reqID, prdId, loanId,name, mobile, pid, termNo, termStatus,
+          to_char(rp.REPAY_PER_DATE,'yyyy-MM-dd') targetRepaymentDate, realRepaymentDate || ' 00:00:00' realRepaymentDate,
+          case when rp.PLAN_REPAY_AMT != 0 then rp.PLAN_REPAY_AMT else banks.PLAN_REPAY_AMT end as plannedPayment,
+          case when rp.status = '01' and rp.PLAN_REPAY_AMT = 0 and (select count (1) from rp_plan_cash where PRD_CLAIMS_ID = prdId and plan_repay_amt = 0 )=1
+                then realRepayment
+                when rp.status = '01' and rp.PLAN_REPAY_AMT = 0 and (select count (1) from rp_plan_cash where PRD_CLAIMS_ID = prdId and plan_repay_amt = 0 ) > 1
+                then banks.PLAN_REPAY_AMT
+            when rp.status = '01' and rp.PLAN_REPAY_AMT != 0 then rp.PLAN_REPAY_AMT
+            else (select nvl(sum(PLAN_REPAY_AMT),0.00)
+                  from RP_PLAN_CASH
+                  where PRD_CLAIMS_ID = aoo.prdId and STATUS != '01'
+                  and REPAY_PER_NO &lt;= rp.REPAY_PER_NO)
+          end as targetRepayment,
+          realRepayment,overdueStatus,
+          to_char(to_date(realRepaymentDate,'yyyy-MM-dd') + 1, 'yyyy-MM-dd') || ' 00:00:00' statusConfirmAt,
+          to_char(to_date(realRepaymentDate,'yyyy-MM-dd') + 1, 'yyyy-MM-dd') || ' 02:00:00' uploadTs,
+          overdueAmount, remainingAmount,loanStatus
+
+      from (
+          select
+          max(reqid) reqID,mobile,prdId,name,pid,loanId,min(termNo) termNo,termStatus,
+          min(targetRepaymentDate) targetRepaymentDate,
+          TO_CHAR(realRepaymentDate, 'yyyy-MM-dd') realRepaymentDate,
+          sum(realRepayment) realRepayment,overdueStatus,overdueAmount,min(remainingAmount) remainingAmount,
+          max(loanStatus) loanStatus
+          from (
+              select
+                  RAWTOHEX(sys_guid()) reqID, usr.mobile mobile ,prd.id prdId,
+                  case when usr.IS_CORP = 1 then com.CORP_NAME else usr.real_name end as name,
+                  case when usr.IS_CORP = 1 then com.CORP_CARD else usr.idno end as  pid ,
+                  prd.ID ||'WYPH'|| prd.prd_num  loanId,
+                  case when rp.IS_EARLY_PREPAYMENT = 1
+                  then (select count(1) from RP_PLAN_CASH where prd_claims_id = prd.id and status = '01' and PLAN_REPAY_AMT!=0)
+                  else rp.REPAY_PER_NO end as termNo,
+
+                  case when rp.status = '01' then 'normal' else 'overdue' end as termStatus,
+                  to_char(rp.REPAY_PER_DATE,'yyyy-MM-dd') targetRepaymentDate,
+
+                  rp.ACTUAL_REPAYMENT_TIME realRepaymentDate,
+
+                  case when rp.status = '01'
+                  then rp.PLAN_REPAY_AMT
+                  else 0.00
+                  end as realRepayment,
+
+                  case when rp.status = '01'
+                  then ''
+                  else 'D' || TO_CHAR(TO_DATE(#{startTime}, 'yyyy-MM-dd')+1 -
+                  TO_DATE(to_char((select min(REPAY_PER_DATE) from RP_PLAN_CASH where status !='01' and PRD_CLAIMS_ID = prd.id), 'yyyy-MM-dd'), 'yyyy-MM-dd'))
+                  end as overdueStatus,
+
+
+                  NVL((select nvl(sum(PLAN_REPAY_AMT),0.00)
+                  from RP_PLAN_CASH
+                  where PRD_CLAIMS_ID = prd.id and STATUS != '01'
+                  and REPAY_PER_NO &lt;= rp.REPAY_PER_NO),0.00) overdueAmount,
+
+                  NVL((select sum(REPAY_PRINCIPAL_AMT)
+                  from RP_PLAN_CASH
+                  where PRD_CLAIMS_ID = prd.id and (REPAY_PER_NO > rp.REPAY_PER_NO or ( status != '01' and REPAY_PER_NO &lt;= rp.REPAY_PER_NO))
+                  ),0.00) remainingAmount,
+
+                  case when rp.status = '01'
+                  and rp.repay_per_no =  (select max(repay_per_no) from RP_PLAN_CASH where PRD_CLAIMS_ID = prd.id)
+                  then 3
+                  when rp.status = '01'
+                  then 1
+                  else 2
+                  end as loanStatus
+              from RP_PLAN_CASH rp
+              join prd_claims prd on prd.id = rp.prd_claims_id
+              join order_user usr on prd.apply_uname = usr.id
+              left join (select DISTINCT CORP_NAME, CORP_CARD, USER_ID from COM_INFO where status = 1) com on usr.id = com.user_id
+              where ((to_char(rp.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd')  = #{startTime} and rp.status='01')
+                    or (to_char(rp.repay_per_date, 'yyyy-MM-dd')  = #{startTime} and rp.status != '01')
+                    or (MOD(to_date(#{startTime},'yyyy-MM-dd') - to_date(to_char(rp.repay_per_date,'yyyy-MM-dd'),'yyyy-MM-dd'), 31) = 0
+                          and  rp.REPAY_PER_NO = (select max(REPAY_PER_NO) from RP_PLAN_CASH where prd_claims_id = prd.id ) and rp.status != '01'
+                          and to_char(rp.repay_per_date,'yyyy-MM-dd') &lt; #{startTime}))
+                and rp.PLAN_REPAY_AMT != 0
+                and prd.id not in (
+                  select DISTINCT a.PRD_CLAIMS_ID from RP_PLAN_CASH  a
+                  JOIN RP_PLAN_CASH b  on a.PRD_CLAIMS_ID = b.PRD_CLAIMS_ID and b.REPAY_PER_NO > a.REPAY_PER_NO
+                  where a.ACTUAL_REPAYMENT_TIME >= b.ACTUAL_REPAYMENT_TIME and a.PLAN_REPAY_AMT !=0 and b.PLAN_REPAY_AMT !=0
+                )
+                and rp.id not in (
+                    select  DISTINCT aoo.id
+                    from RP_PLAN_CASH aoo join RP_PLAN_CASH boo
+                    on aoo.PRD_CLAIMS_ID = boo.PRD_CLAIMS_ID and aoo.REPAY_PER_NO != boo.REPAY_PER_NO and aoo.PLAN_REPAY_AMT != 0 and boo.PLAN_REPAY_AMT != 0
+                    where TO_CHAR(aoo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd') = TO_CHAR(boo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd')
+                    and TO_CHAR(aoo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd') = #{startTime}
+                     and ( TO_CHAR(aoo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd') != (
+                                select TO_CHAR(ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd')
+                                from RP_PLAN_CASH
+                                where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0
+                                    and REPAY_PER_NO = (select max(REPAY_PER_NO) from RP_PLAN_CASH where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0)
+                            )
+                            or (select ACTUAL_REPAYMENT_TIME
+								from RP_PLAN_CASH
+								where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0
+                                and REPAY_PER_NO = (select max(REPAY_PER_NO) from RP_PLAN_CASH where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0)
+                                ) is null )
+                 )
+
+          )
+          GROUP BY  mobile,prdId,name,pid,loanId,termStatus,TO_CHAR(realRepaymentDate, 'yyyy-MM-dd'),overdueStatus,overdueAmount
+
+
+          union all
+
+          select
+          reqID,mobile,prdId,name,pid,loanId,termNo,termStatus,
+          targetRepaymentDate,
+          TO_CHAR(realRepaymentDate, 'yyyy-MM-dd') realRepaymentDate,
+          realRepayment,overdueStatus,overdueAmount,remainingAmount,
+          loanStatus
+          from (
+              select
+                  RAWTOHEX(sys_guid()) reqID, usr.mobile mobile ,prd.id prdId,
+                  case when usr.IS_CORP = 1 then com.CORP_NAME else usr.real_name end as name,
+                  case when usr.IS_CORP = 1 then com.CORP_CARD else usr.idno end as  pid ,
+                  prd.ID ||'WYPH'|| prd.prd_num  loanId,
+                  case when rp.IS_EARLY_PREPAYMENT = 1
+                  then (select count(1) from RP_PLAN_CASH where prd_claims_id = prd.id and status = '01' and PLAN_REPAY_AMT!=0)
+                  else rp.REPAY_PER_NO end as termNo,
+
+                  case when rp.status = '01' then 'normal' else 'overdue' end as termStatus,
+                  to_char(rp.REPAY_PER_DATE,'yyyy-MM-dd') targetRepaymentDate,
+
+                  rp.ACTUAL_REPAYMENT_TIME realRepaymentDate,
+
+                  case when rp.status = '01'
+                  then rp.PLAN_REPAY_AMT
+                  else 0.00
+                  end as realRepayment,
+
+                  case when rp.status = '01'
+                  then ''
+                  else 'D' || TO_CHAR(TO_DATE(#{startTime}, 'yyyy-MM-dd')+1 -
+                  TO_DATE(to_char((select min(REPAY_PER_DATE) from RP_PLAN_CASH where status !='01' and PRD_CLAIMS_ID = prd.id), 'yyyy-MM-dd'), 'yyyy-MM-dd'))
+                  end as overdueStatus,
+
+
+                  NVL((select nvl(sum(PLAN_REPAY_AMT),0.00)
+                  from RP_PLAN_CASH
+                  where PRD_CLAIMS_ID = prd.id and STATUS != '01'
+                  and REPAY_PER_NO &lt;= rp.REPAY_PER_NO),0.00) overdueAmount,
+
+                  NVL((select sum(REPAY_PRINCIPAL_AMT)
+                  from RP_PLAN_CASH
+                  where PRD_CLAIMS_ID = prd.id and (REPAY_PER_NO > rp.REPAY_PER_NO or ( status != '01' and REPAY_PER_NO &lt;= rp.REPAY_PER_NO))
+                  ),0.00) remainingAmount,
+
+                  case when rp.status = '01'
+                  and rp.repay_per_no =  (select max(repay_per_no) from RP_PLAN_CASH where PRD_CLAIMS_ID = prd.id)
+                  then 3
+                  when rp.status = '01'
+                  then 1
+                  else 2
+                  end as loanStatus
+              from RP_PLAN_CASH rp
+              join prd_claims prd on prd.id = rp.prd_claims_id
+              join order_user usr on prd.apply_uname = usr.id
+              left join (select DISTINCT CORP_NAME, CORP_CARD, USER_ID from COM_INFO where status = 1) com on usr.id = com.user_id
+              where ((to_char(rp.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd')  = #{startTime} and rp.status='01')
+                    or (to_char(rp.repay_per_date, 'yyyy-MM-dd')  = #{startTime} and rp.status != '01')
+                    or (MOD(to_date(#{startTime},'yyyy-MM-dd') - to_date(to_char(rp.repay_per_date,'yyyy-MM-dd'),'yyyy-MM-dd'), 31) = 0
+                          and  rp.REPAY_PER_NO = (select max(REPAY_PER_NO) from RP_PLAN_CASH where prd_claims_id = prd.id ) and rp.status != '01'
+                          and to_char(rp.repay_per_date,'yyyy-MM-dd') &lt; #{startTime}))
+                and rp.PLAN_REPAY_AMT != 0
+                and prd.id not in (
+                  select DISTINCT a.PRD_CLAIMS_ID from RP_PLAN_CASH  a
+                  JOIN RP_PLAN_CASH b  on a.PRD_CLAIMS_ID = b.PRD_CLAIMS_ID and b.REPAY_PER_NO > a.REPAY_PER_NO
+                  where a.ACTUAL_REPAYMENT_TIME >= b.ACTUAL_REPAYMENT_TIME and a.PLAN_REPAY_AMT !=0 and b.PLAN_REPAY_AMT !=0
+                )
+                and rp.id in (
+                    select  DISTINCT aoo.id
+                    from RP_PLAN_CASH aoo join RP_PLAN_CASH boo
+                    on aoo.PRD_CLAIMS_ID = boo.PRD_CLAIMS_ID and aoo.REPAY_PER_NO != boo.REPAY_PER_NO and aoo.PLAN_REPAY_AMT != 0 and boo.PLAN_REPAY_AMT != 0
+                    where TO_CHAR(aoo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd') = TO_CHAR(boo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd')
+                     and TO_CHAR(aoo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd') = #{startTime}
+                     and ( TO_CHAR(aoo.ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd') != (
+							select TO_CHAR(ACTUAL_REPAYMENT_TIME,'yyyy-MM-dd')
+							from RP_PLAN_CASH
+							where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0
+								and REPAY_PER_NO = (select max(REPAY_PER_NO) from RP_PLAN_CASH where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0)
+                            )
+                            or (select ACTUAL_REPAYMENT_TIME
+								from RP_PLAN_CASH
+								where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0
+                                and REPAY_PER_NO = (select max(REPAY_PER_NO) from RP_PLAN_CASH where PRD_CLAIMS_ID = aoo.PRD_CLAIMS_ID and PLAN_REPAY_AMT != 0)
+                                ) is null )
+                 )
+
+          )
+      ) aoo
+      join RP_PLAN_CASH rp on rp.PRD_CLAIMS_ID = aoo.prdId and rp.REPAY_PER_NO = aoo.termNo
+      left join RP_PLAN_CASH_BACKUPS banks on banks.PRD_CLAIMS_ID = aoo.prdId and banks.REPAY_PER_NO = aoo.termNo
+      order by rp.ACTUAL_REPAYMENT_TIME asc,rp.repay_per_date asc
+  </select>
+
+    <select id="selectApplyLonInfo" parameterType="java.lang.Object" resultType="com.wypuhui.p2p.uploud.data.baihang.result.LoanApplyInfo">
+        select
+            RAWTOHEX(sys_guid()) reqID ,prd.id prdId,
+            prd.ID ||'WYPH'|| prd.prd_num  loanId ,
+            to_char(prd.LOAN_DATE + 30/(24*60*60),'yyyy-mm-dd HH24:MI:SS') uploadTs,
+            case when usr.IS_CORP = 1 then com.CORP_NAME else usr.real_name end as name,
+	        case when usr.IS_CORP = 1 then com.CORP_CARD else usr.idno end as  pid ,
+            usr.mobile mobile ,
+            '' homeAddress,'' homePhone, '' workName,
+            '' workPhone,'' workAddress,
+            prd.TRADE_MARK tradeMark, prd.purpose purpose,prd.BORROW_AMOUNT applyAmount
+        from prd_claims prd
+        join order_user usr on usr.id = prd.APPLY_UNAME
+        left join (select DISTINCT CORP_NAME, CORP_CARD, USER_ID from COM_INFO where status = 1) com on usr.id = com.user_id
+        where to_char(prd.LOAN_DATE,'yyyy-MM-dd') between #{startTime} and #{endTime}
+        and prd.id not in (
+                select DISTINCT a.PRD_CLAIMS_ID from RP_PLAN_CASH  a
+                JOIN RP_PLAN_CASH b  on a.PRD_CLAIMS_ID = b.PRD_CLAIMS_ID and b.REPAY_PER_NO > a.REPAY_PER_NO
+                where a.ACTUAL_REPAYMENT_TIME >= b.ACTUAL_REPAYMENT_TIME and a.PLAN_REPAY_AMT !=0 and b.PLAN_REPAY_AMT !=0 )
+        order by prd.create_time asc
+    </select>
+
+    <select id="queryRpPlanCaseByPrdClaimsId" resultType="com.wypuhui.p2p.uploud.data.baihang.result.RpPlanCash" parameterType="java.lang.Object">
+        SELECT REPAY_PER_DATE repayPerDate,IS_EARLY_PREPAYMENT isEarlyPrepayment FROM RP_PLAN_CASH WHERE PRD_CLAIMS_ID = #{id} ORDER BY REPAY_PER_NO ASC
+    </select>
+
+    <select id="selectApplyLoanInfoNow" parameterType="java.lang.Object" resultType="com.wypuhui.p2p.uploud.data.baihang.result.LoanApplyInfo">
+         select
+            RAWTOHEX(sys_guid()) reqID ,prd.id prdId,
+            prd.ID ||'WYPH'|| prd.prd_num  loanId ,
+            case when usr.IS_CORP = 1 then com.CORP_NAME else usr.real_name end as name,
+            case when usr.IS_CORP = 1 then com.CORP_CARD else usr.idno end as  pid ,
+            usr.mobile mobile ,
+            '' homeAddress,'' homePhone, '' workName,
+            '' workPhone,'' workAddress,
+            prd.TRADE_MARK tradeMark, prd.purpose purpose,prd.BORROW_AMOUNT applyAmount
+        from prd_claims prd
+        join order_user usr on usr.id = prd.APPLY_UNAME
+        left join (select DISTINCT CORP_NAME, CORP_CARD, USER_ID from COM_INFO where status = 1) com on usr.id = com.user_id
+        WHERE prd.ID=#{id,jdbcType=INTEGER}
+    </select>
+   <!-- select
+    prd.ID ||'WY'|| rp.id || 'RP' || PRD.PRD_NUM reqID, usr.real_name name, usr.idno pid , usr.mobile mobile ,
+    prd.ID ||'WYPH'|| prd.prd_num  loanId, rp.REPAY_PER_NO termNo,
+    case when rp.status = '01' then 'normal' else 'overdue' end as termStatus,
+    to_char(rp.REPAY_PER_DATE,'yyyy-MM-dd') targetRepaymentDate,
+    to_char(rp.ACTUAL_REPAYMENT_TIME,'yyyy-mm-dd HH24:MI:SS') realRepaymentDate,
+    rp.PLAN_REPAY_AMT plannedPayment,
+    case when rp.status = '01' then 0.00 else rp.PLAN_REPAY_AMT end as targetRepayment,
+    case when rp.status = '01' then rp.PLAN_REPAY_AMT else 0.00 end as realRepayment,
+    case when rp.status = '01' then '' else 'D1' end as overdueStatus,
+    to_char(rp.ACTUAL_REPAYMENT_TIME,'yyyy-mm-dd HH24:MI:SS') statusConfirmAt,
+    (select nvl(sum(PLAN_REPAY_AMT),0.00) from RP_PLAN_CASH where PRD_CLAIMS_ID = prd.id and STATUS = '00' and REPAY_PER_NO &lt;= rp.REPAY_PER_NO) overdueAmount,
+    prd.BORROW_AMOUNT - (select sum(REPAY_PRINCIPAL_AMT) from RP_PLAN_CASH where PRD_CLAIMS_ID = prd.id and REPAY_PER_NO &lt;= rp.REPAY_PER_NO) remainingAmount,
+    case when rp.status = '01' and rp.repay_per_no =  (select max(repay_per_no) from RP_PLAN_CASH where PRD_CLAIMS_ID = prd.id) then 3
+    when rp.status = '01' then 1
+    else 2 end as loanStatus
+    from RP_PLAN_CASH rp
+    join prd_claims prd on prd.id = rp.prd_claims_id
+    join order_user usr on prd.apply_uname = usr.id
+    where to_char(rp.repay_per_date, 'yyyy-MM-dd') = to_char(sysdate-1,'yyyy-MM-dd')
+
+
+    -->
+</mapper>

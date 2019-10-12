@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.wypuhui.p2p.uploud.data.baihang.dao.LoanInfoMapper" >
+  <insert id="insertLoanAfterInfo" parameterType="com.wypuhui.p2p.uploud.data.baihang.result.LoanAfterInfo">
+    insert into loan_after_info (id,reqID, opCode, uploadTs,
+      name, pid, mobile,
+      loanId, termNo, termStatus,
+      targetRepaymentDate, realRepaymentDate, plannedPayment,
+      targetRepayment, realRepayment, overdueStatus,statusConfirmAt,
+      overdueAmount,remainingAmount,loanStatus,isSendSuccess,errorExplain,sendType,responseJson)
+    values (#{id,jdbcType=INTEGER},#{reqID,jdbcType=VARCHAR},#{opCode,jdbcType=VARCHAR},#{uploadTs,jdbcType=VARCHAR},
+      #{name,jdbcType=VARCHAR},#{pid,jdbcType=VARCHAR},#{mobile,jdbcType=VARCHAR},
+      #{loanId,jdbcType=VARCHAR},#{termNo,jdbcType=INTEGER},#{termStatus,jdbcType=VARCHAR},
+      #{targetRepaymentDate,jdbcType=VARCHAR},#{realRepaymentDate,jdbcType=VARCHAR},#{plannedPayment,jdbcType=DECIMAL},
+      #{targetRepayment,jdbcType=DECIMAL},#{realRepayment,jdbcType=DECIMAL},#{overdueStatus,jdbcType=VARCHAR},#{statusConfirmAt,jdbcType=VARCHAR},
+      #{overdueAmount,jdbcType=DECIMAL},#{remainingAmount,jdbcType=DECIMAL},#{loanStatus,jdbcType=INTEGER},
+       #{isSendSuccess,jdbcType=VARCHAR},#{errorExplain,jdbcType=VARCHAR},#{sendType,jdbcType=VARCHAR},#{responseJson,jdbcType=VARCHAR}
+      )
+  </insert>
+
+  <insert id="batchInsertAfterInfo" parameterType="java.util.List" useGeneratedKeys="false">
+     insert into loan_after_info (reqID, opCode, uploadTs,
+      name, pid, mobile,
+      loanId, termNo, termStatus,
+      targetRepaymentDate, realRepaymentDate, plannedPayment,
+      targetRepayment, realRepayment, overdueStatus,statusConfirmAt,
+      overdueAmount,remainingAmount,loanStatus,isSendSuccess,errorExplain,sendType)
+    values
+    <foreach collection="list" item="item" index="index" separator=",">
+      (#{item.reqID,jdbcType=VARCHAR},#{item.opCode,jdbcType=VARCHAR},#{item.uploadTs,jdbcType=VARCHAR},
+      #{item.name,jdbcType=VARCHAR},#{item.pid,jdbcType=VARCHAR},#{item.mobile,jdbcType=VARCHAR},
+      #{item.loanId,jdbcType=VARCHAR},#{item.termNo,jdbcType=INTEGER},#{item.termStatus,jdbcType=VARCHAR},
+      #{item.targetRepaymentDate,jdbcType=VARCHAR},#{item.realRepaymentDate,jdbcType=VARCHAR},#{item.plannedPayment,jdbcType=DECIMAL},
+      #{item.targetRepayment,jdbcType=DECIMAL},#{item.realRepayment,jdbcType=DECIMAL},#{item.overdueStatus,jdbcType=VARCHAR},#{item.statusConfirmAt,jdbcType=VARCHAR},
+      #{item.overdueAmount,jdbcType=DECIMAL},#{item.remainingAmount,jdbcType=DECIMAL},#{item.loanStatus,jdbcType=INTEGER},
+      #{item.isSendSuccess,jdbcType=VARCHAR},#{item.errorExplain,jdbcType=VARCHAR},#{item.sendType,jdbcType=VARCHAR}
+      )
+    </foreach>
+
+
+  </insert>
+
+  <insert id="insertLoanAccountInfo" parameterType="com.wypuhui.p2p.uploud.data.baihang.result.LoanAccountInfo">
+    insert into loan_account_info
+      (id,reqID, opCode, uploadTs,
+      name, pid, mobile,
+      loanId, originalLoanId, guaranteeType,
+      loanPurpose, applyDate, accountOpenDate,
+      issueDate, dueDate, loanAmount,totalTerm,
+      targetRepayDateType,termPeriod,targetRepayDateList,
+      firstRepaymentDate,gracePeriod,isSendSuccess,errorExplain,sendType,responseJson)
+    values (#{id,jdbcType=INTEGER},#{reqID,jdbcType=VARCHAR},#{opCode,jdbcType=VARCHAR},#{uploadTs,jdbcType=VARCHAR},
+      #{name,jdbcType=VARCHAR},#{pid,jdbcType=VARCHAR},#{mobile,jdbcType=VARCHAR},
+      #{loanId,jdbcType=VARCHAR},#{originalLoanId,jdbcType=VARCHAR},#{guaranteeType,jdbcType=INTEGER},
+      #{loanPurpose,jdbcType=INTEGER},#{applyDate,jdbcType=VARCHAR},#{accountOpenDate,jdbcType=VARCHAR},
+      #{issueDate,jdbcType=VARCHAR},#{dueDate,jdbcType=VARCHAR},#{loanAmount,jdbcType=DECIMAL},#{totalTerm,jdbcType=INTEGER},
+      #{targetRepayDateType,jdbcType=INTEGER},#{termPeriod,jdbcType=INTEGER},#{targetRepayDateList,jdbcType=VARCHAR},
+      #{firstRepaymentDate,jdbcType=VARCHAR},#{gracePeriod,jdbcType=INTEGER},
+      #{isSendSuccess,jdbcType=VARCHAR},#{errorExplain,jdbcType=VARCHAR},#{sendType,jdbcType=VARCHAR},#{responseJson,jdbcType=VARCHAR}
+      )
+  </insert>
+
+  <insert id="batchInsertAccountInfo" parameterType="java.util.List" useGeneratedKeys="false">
+    insert into loan_account_info
+      (reqID, opCode, uploadTs,
+      name, pid, mobile,
+      loanId, originalLoanId, guaranteeType,
+      loanPurpose, applyDate, accountOpenDate,
+      issueDate, dueDate, loanAmount,totalTerm,
+      targetRepayDateType,termPeriod,targetRepayDateList,
+      firstRepaymentDate,gracePeriod,isSendSuccess,errorExplain,sendType)
+    values
+    <foreach collection="list" item="item" index="index" separator=",">
+      (#{item.reqID,jdbcType=VARCHAR},#{item.opCode,jdbcType=VARCHAR},#{item.uploadTs,jdbcType=VARCHAR},
+      #{item.name,jdbcType=VARCHAR},#{item.pid,jdbcType=VARCHAR},#{item.mobile,jdbcType=VARCHAR},
+      #{item.loanId,jdbcType=VARCHAR},#{item.originalLoanId,jdbcType=VARCHAR},#{item.guaranteeType,jdbcType=INTEGER},
+      #{item.loanPurpose,jdbcType=INTEGER},#{item.applyDate,jdbcType=VARCHAR},#{item.accountOpenDate,jdbcType=VARCHAR},
+      #{item.issueDate,jdbcType=VARCHAR},#{item.dueDate,jdbcType=VARCHAR},#{item.loanAmount,jdbcType=DECIMAL},#{item.totalTerm,jdbcType=INTEGER},
+      #{item.targetRepayDateType,jdbcType=INTEGER},#{item.termPeriod,jdbcType=INTEGER},#{item.targetRepayDateList,jdbcType=VARCHAR},
+      #{item.firstRepaymentDate,jdbcType=VARCHAR},#{item.gracePeriod,jdbcType=INTEGER},
+      #{item.isSendSuccess,jdbcType=VARCHAR},#{item.errorExplain,jdbcType=VARCHAR},#{item.sendType,jdbcType=VARCHAR}
+      )
+    </foreach>
+  </insert>
+
+
+  <insert id="insertLoanApplyInfo" parameterType="com.wypuhui.p2p.uploud.data.baihang.result.LoanApplyInfo">
+    insert into loan_apply_info (id,name, pid, mobile,
+      queryReason, guaranteeType, loanPurpose,
+      customType, applyAmount, loanId,
+      homeAddress, homePhone, workName,
+      workAddress, workPhone, isSendSuccess,
+      errorExplain,responseJson,sendType)
+    values (#{id,jdbcType=INTEGER},#{name,jdbcType=VARCHAR},#{pid,jdbcType=VARCHAR},#{mobile,jdbcType=VARCHAR},
+      #{queryReason,jdbcType=INTEGER},#{guaranteeType,jdbcType=INTEGER},#{loanPurpose,jdbcType=INTEGER},
+      #{customType,jdbcType=INTEGER},#{applyAmount,jdbcType=DECIMAL},#{loanId,jdbcType=VARCHAR},
+      #{homeAddress,jdbcType=VARCHAR},#{homePhone,jdbcType=VARCHAR},#{workName,jdbcType=VARCHAR},
+      #{workAddress,jdbcType=VARCHAR},#{workPhone,jdbcType=VARCHAR},#{isSendSuccess,jdbcType=VARCHAR},
+      #{errorExplain,jdbcType=VARCHAR},#{responseJson,jdbcType=VARCHAR},#{sendType,jdbcType=VARCHAR}
+      )
+  </insert>
+
+
+  <insert id="batchInsertApplyInfo" parameterType="java.util.List" useGeneratedKeys="false">
+    insert into loan_apply_info (name, pid, mobile,reqID, uploadTs,
+      queryReason, guaranteeType, loanPurpose,
+      customType, applyAmount, loanId,
+      homeAddress, homePhone, workName,
+      workAddress, workPhone, isSendSuccess,
+      errorExplain,responseJson,sendType)
+    values
+    <foreach collection="list" item="item" index="index" separator=",">
+      (#{item.name,jdbcType=VARCHAR},#{item.pid,jdbcType=VARCHAR},#{item.mobile,jdbcType=VARCHAR},
+      #{item.reqID,jdbcType=VARCHAR},#{item.uploadTs,jdbcType=VARCHAR},
+      #{item.queryReason,jdbcType=INTEGER},#{item.guaranteeType,jdbcType=INTEGER},#{item.loanPurpose,jdbcType=INTEGER},
+      #{item.customType,jdbcType=INTEGER},#{item.applyAmount,jdbcType=DECIMAL},#{item.loanId,jdbcType=VARCHAR},
+      #{item.homeAddress,jdbcType=VARCHAR},#{item.homePhone,jdbcType=VARCHAR},#{item.workName,jdbcType=VARCHAR},
+      #{item.workAddress,jdbcType=VARCHAR},#{item.workPhone,jdbcType=VARCHAR},#{item.isSendSuccess,jdbcType=VARCHAR},
+      #{item.errorExplain,jdbcType=VARCHAR},#{item.responseJson,jdbcType=VARCHAR},#{item.sendType,jdbcType=VARCHAR}
+      )
+    </foreach>
+
+  </insert>
+
+  <!--<insert id="insertLoanExtensionInfo" parameterType="com.szkj.p2pData.dao.LoanExtensionInfo">-->
+    <!--insert into loan_extension_info (id,reqID, opCode, uploadTs,-->
+      <!--name, pid, mobile,-->
+      <!--loanId, guaranteeType, loanPurpose,-->
+      <!--applyDate, accountOpenDate, issueDate,-->
+      <!--dueDate, loanAmount, totalTerm,targetRepayDateType,-->
+      <!--termPeriod,targetRepayDateList,firstRepaymentDate,gracePeriod,isSendSuccess,errorExplain)-->
+    <!--values (#{id,jdbcType=INTEGER},#{reqID,jdbcType=VARCHAR},#{opCode,jdbcType=VARCHAR},#{uploadTs,jdbcType=VARCHAR},-->
+      <!--#{name,jdbcType=VARCHAR},#{pid,jdbcType=VARCHAR},#{mobile,jdbcType=VARCHAR},-->
+      <!--#{loanId,jdbcType=VARCHAR},#{guaranteeType,jdbcType=INTEGER},#{loanPurpose,jdbcType=INTEGER},-->
+      <!--#{applyDate,jdbcType=VARCHAR},#{accountOpenDate,jdbcType=VARCHAR},#{issueDate,jdbcType=VARCHAR},-->
+      <!--#{dueDate,jdbcType=VARCHAR},#{loanAmount,jdbcType=DECIMAL},#{totalTerm,jdbcType=INTEGER},#{targetRepayDateType,jdbcType=INTEGER},-->
+      <!--#{termPeriod,jdbcType=INTEGER},#{targetRepayDateList,jdbcType=VARCHAR},#{firstRepaymentDate,jdbcType=VARCHAR},#{gracePeriod,jdbcType=INTEGER},-->
+      <!--#{isSendSuccess,jdbcType=VARCHAR},#{errorExplain,jdbcType=VARCHAR}-->
+      <!--)-->
+  <!--</insert>-->
+
+
+</mapper>
